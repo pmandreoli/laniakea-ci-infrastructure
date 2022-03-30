@@ -4,7 +4,7 @@ pipeline {
 	stages {
 		stage('deploy') {
 			steps {
-				withCredentials([file(credentialsId: 'iam-recas-laniakea-test-jenkins', variable: 'IAM_CLIENT_PASSWORD')]) {
+				withCredentials([string(credentialsId: 'iam-recas-laniakea-test-jenkins', variable: 'IAM_CLIENT_PASSWORD')]) {
 					sh '''
 					eval `oidc-keychain`
           ./expect_laniakea_dev.sh $IAM_CLIENT_PASSWORD
