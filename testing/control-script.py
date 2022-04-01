@@ -1,6 +1,6 @@
 #/usr/bin/env python
 
-import os, sys
+import sys
 import argparse
 import subprocess
 import time
@@ -9,6 +9,7 @@ import re
 import yaml 
 import requests
 import json
+import install_tools_from_wf
 
 #logging.basicConfig(filename='/tmp/indigo_paas_checker.log', format='%(levelname)s %(asctime)s %(message)s', level=logging.DEBUG)
 # Create logging facility print to stdout and to log file.
@@ -244,7 +245,11 @@ def run_test_list(test_list, orchestrator_url, polling_time):
 
       # Run test
       logger.debug('Testing ' + name)
-      test_exit_status = run_test(tosca_template_path, orchestrator_url, inputs, polling_time, enable_endpoint_check)
+      test_exit_status, dep_uid = run_test_create(tosca_template_path, orchestrator_url, inputs, polling_time, enable_endpoint_check)
+      end_point = get_endpoint(dep_uid) 
+      install_tools_from_wf.install_tools(end_point,"not_very_secret_api_key","./test_workflow.ga")
+      
+      test_exit_status = run_test_delete(tosca_template_path, orchestrator_url, inputs, polling_time, enable_endpoint_check)
       if test_exit_status:
         summary_output[name] = "SUCCESS"
       elif not test_exit_status:
@@ -255,7 +260,7 @@ def run_test_list(test_list, orchestrator_url, polling_time):
   return summary_output
 
 #______________________________________
-def run_test(tosca_template, orchestrator_url, inputs, polling_time, enable_endpoint_check=False):
+def run_test_create(tosca_template, orchestrator_url, inputs, polling_time, enable_endpoint_check=False):
   # Start PaaS test deployment
   dep_uuid, dep_status = depcreate(tosca_template, inputs, orchestrator_url)
 
@@ -289,7 +294,16 @@ def run_test(tosca_template, orchestrator_url, inputs, polling_time, enable_endp
       logger.debug('The deployment is in CREATE_COMPLETE, but it is not reachable. Please check Orchestrator logs.')
       create_status_record = 'CREATE_FAILED'
       logger.debug('The create_status_record is set to ' + create_status_record)
+  
 
+  # Notify delete failed.
+  if(create_status_record == 'CREATE_FAILED'):
+    logger.debug('Deployment ' + dep_uuid + ' creation failed.')
+    current_status = get_status(dep_uuid)
+    logger.debug('Current status ' + current_status)
+    return False, dep_uuid
+
+def run_test_delete(tosca_template, orchestrator_url, inputs, polling_time,dep_uuid):
   ## Always delete deployment
   delete_out, delete_err, delete_status = depdel(dep_uuid)
   dep_status = get_status(dep_uuid)
@@ -324,13 +338,6 @@ def run_test(tosca_template, orchestrator_url, inputs, polling_time, enable_endp
   # Record Delete status. If DELETE_FAILED the job will file at the end.
   logger.debug(dep_status)
   delete_status_record = dep_status
-
-  # Notify delete failed.
-  if(create_status_record == 'CREATE_FAILED'):
-    logger.debug('Deployment ' + dep_uuid + ' creation failed.')
-    current_status = get_status(dep_uuid)
-    logger.debug('Current status ' + current_status)
-    return False
   if(delete_status_record == 'DELETE_FAILED'):
     logger.debug('Deployment ' + dep_uuid + ' delete failed.')
     current_status = get_status(dep_uuid)
@@ -339,7 +346,6 @@ def run_test(tosca_template, orchestrator_url, inputs, polling_time, enable_endp
   else:
     logger.debug('Deployment correctly performed. Check logs for further details.')
     return True
-
 #______________________________________
 def indigo_paas_checker():
 
